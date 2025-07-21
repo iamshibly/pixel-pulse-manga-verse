@@ -63,6 +63,17 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				}
 			},
+			backgroundImage: {
+				'gradient-cyber': 'var(--gradient-cyber)',
+				'gradient-neon': 'var(--gradient-neon)',
+				'gradient-electric': 'var(--gradient-electric)',
+				'gradient-bg': 'var(--gradient-bg)'
+			},
+			boxShadow: {
+				'neon': 'var(--shadow-neon)',
+				'pink': 'var(--shadow-pink)',
+				'glow': 'var(--shadow-glow)'
+			},
 			borderRadius: {
 				lg: 'var(--radius)',
 				md: 'calc(var(--radius) - 2px)',
