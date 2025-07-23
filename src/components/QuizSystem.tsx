@@ -37,8 +37,8 @@ interface LeaderboardEntry extends UserData {
 }
 
 const QuizSystem: React.FC = () => {
-  const [apiKey, setApiKey] = useState('');
-  const [apiProvider, setApiProvider] = useState<'openai' | 'deepseek'>('openai');
+  const apiKey = 'sk-231cb84ced594082a984fe827472322f';
+  const apiProvider = 'deepseek';
   const [username, setUsername] = useState('');
   const [userData, setUserData] = useState<UserData | null>(null);
   const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
@@ -108,15 +108,6 @@ const QuizSystem: React.FC = () => {
   };
 
   const generateQuiz = async (type: 'quick' | 'challenge' | 'expert') => {
-    if (!apiKey) {
-      toast({
-        title: "API Key Required",
-        description: `Please enter your ${apiProvider === 'openai' ? 'OpenAI' : 'DeepSeek'} API key to generate quizzes.`,
-        variant: "destructive"
-      });
-      return;
-    }
-
     setLoading(true);
     try {
       const duration = type === 'quick' ? 60 : type === 'challenge' ? 180 : 300;
@@ -158,11 +149,8 @@ const QuizSystem: React.FC = () => {
         ]
       }`;
 
-      const apiUrl = apiProvider === 'openai' 
-        ? 'https://api.openai.com/v1/chat/completions'
-        : 'https://api.deepseek.com/chat/completions';
-
-      const model = apiProvider === 'openai' ? 'gpt-4o' : 'deepseek-chat';
+      const apiUrl = 'https://api.deepseek.com/chat/completions';
+      const model = 'deepseek-chat';
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -333,40 +321,6 @@ const QuizSystem: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label>AI Provider</Label>
-              <div className="flex gap-2 mt-2">
-                <Button
-                  variant={apiProvider === 'openai' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setApiProvider('openai')}
-                >
-                  OpenAI GPT-4o
-                </Button>
-                <Button
-                  variant={apiProvider === 'deepseek' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setApiProvider('deepseek')}
-                >
-                  DeepSeek R1
-                </Button>
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="apikey">
-                {apiProvider === 'openai' ? 'OpenAI' : 'DeepSeek'} API Key
-              </Label>
-              <Input
-                id="apikey"
-                type="password"
-                placeholder={apiProvider === 'openai' ? 'sk-proj-...' : 'sk-...'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-              />
-              <p className="text-sm text-muted-foreground mt-1">
-                Required for AI-generated quiz questions
-              </p>
-            </div>
             <div>
               <Label htmlFor="username">Username</Label>
               <Input
