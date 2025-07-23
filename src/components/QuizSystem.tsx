@@ -38,6 +38,7 @@ interface LeaderboardEntry extends UserData {
 
 const QuizSystem: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
+  const [apiProvider, setApiProvider] = useState<'openai' | 'deepseek'>('openai');
   const [username, setUsername] = useState('');
   const [userData, setUserData] = useState<UserData | null>(null);
   const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
@@ -110,7 +111,7 @@ const QuizSystem: React.FC = () => {
     if (!apiKey) {
       toast({
         title: "API Key Required",
-        description: "Please enter your OpenAI API key to generate quizzes.",
+        description: `Please enter your ${apiProvider === 'openai' ? 'OpenAI' : 'DeepSeek'} API key to generate quizzes.`,
         variant: "destructive"
       });
       return;
@@ -121,19 +122,25 @@ const QuizSystem: React.FC = () => {
       const duration = type === 'quick' ? 60 : type === 'challenge' ? 180 : 300;
       const difficulty = type === 'quick' ? 'easy' : type === 'challenge' ? 'medium' : 'hard';
       
-      const prompt = `Generate a unique 5-question anime/manga quiz with the following specifications:
+      // Add randomization to ensure different questions each time
+      const randomSeed = Math.random().toString(36).substring(7);
+      const timestamp = Date.now();
+      
+      const prompt = `Generate a completely unique 5-question anime/manga quiz (Seed: ${randomSeed}-${timestamp}):
       - Difficulty: ${difficulty}
-      - Mix of question types: 2 multiple-choice (4 options each), 2 true/false, 1 fill-in-the-blank
-      - Cover diverse anime/manga topics: characters, plot, release years, creators, trivia
-      - Each question should be completely unique and not repetitive
-      - Format as JSON with this structure:
+      - Question types: 2 multiple-choice (4 options each), 2 true/false, 1 fill-in-the-blank
+      - Cover diverse anime/manga: popular series, characters, plot points, creators, release dates, trivia
+      - Ensure questions are completely different from any previous quiz
+      - Use varied anime/manga series each time (not always the same popular ones)
+      - Include both classic and modern anime/manga
+      - Format as valid JSON only:
       {
         "questions": [
           {
             "type": "multiple-choice",
             "question": "question text",
-            "options": ["A", "B", "C", "D"],
-            "correctAnswer": "A",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correctAnswer": "Option A",
             "difficulty": "${difficulty}"
           },
           {
@@ -151,16 +158,22 @@ const QuizSystem: React.FC = () => {
         ]
       }`;
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const apiUrl = apiProvider === 'openai' 
+        ? 'https://api.openai.com/v1/chat/completions'
+        : 'https://api.deepseek.com/chat/completions';
+
+      const model = apiProvider === 'openai' ? 'gpt-4o' : 'deepseek-chat';
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model,
           messages: [
-            { role: 'system', content: 'You are an anime/manga expert creating diverse quiz questions. Always respond with valid JSON only.' },
+            { role: 'system', content: 'You are an anime/manga expert creating diverse quiz questions. Always respond with valid JSON only. Never repeat questions or use the same anime/manga series consecutively.' },
             { role: 'user', content: prompt }
           ],
           temperature: 0.9,
@@ -169,14 +182,44 @@ const QuizSystem: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate quiz');
+        const errorData = await response.json().catch(() => ({}));
+        let errorMessage = 'Failed to generate quiz';
+        
+        if (response.status === 401) {
+          errorMessage = 'Invalid API key. Please check your API key.';
+        } else if (response.status === 429) {
+          errorMessage = errorData.error?.message || 'API quota exceeded. Please check your billing or try DeepSeek R1.';
+        } else if (response.status === 403) {
+          errorMessage = 'API access forbidden. Please check your API key permissions.';
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
-      const quizData = JSON.parse(data.choices[0].message.content);
+      
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new Error('Invalid response from API');
+      }
+
+      let quizData;
+      try {
+        const content = data.choices[0].message.content;
+        // Clean up the response in case there's extra text
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : content;
+        quizData = JSON.parse(jsonString);
+      } catch (parseError) {
+        console.error('JSON Parse Error:', parseError);
+        throw new Error('Failed to parse quiz data. Please try again.');
+      }
+
+      if (!quizData.questions || !Array.isArray(quizData.questions) || quizData.questions.length !== 5) {
+        throw new Error('Invalid quiz format received. Please try again.');
+      }
       
       const quiz: Quiz = {
-        id: Date.now().toString(),
+        id: `${Date.now()}-${randomSeed}`,
         questions: quizData.questions.map((q: any, index: number) => ({
           id: index + 1,
           ...q
@@ -196,13 +239,13 @@ const QuizSystem: React.FC = () => {
       
       toast({
         title: "Quiz Generated!",
-        description: `${type.charAt(0).toUpperCase() + type.slice(1)} quiz ready. You have ${duration / 60} minutes!`
+        description: `${type.charAt(0).toUpperCase() + type.slice(1)} quiz ready. You have ${Math.floor(duration / 60)} minute${duration >= 120 ? 's' : ''}!`
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating quiz:', error);
       toast({
-        title: "Error",
-        description: "Failed to generate quiz. Please check your API key.",
+        title: "Quiz Generation Failed",
+        description: error.message || "Failed to generate quiz. Please check your API key and try again.",
         variant: "destructive"
       });
     } finally {
@@ -291,11 +334,32 @@ const QuizSystem: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="apikey">OpenAI API Key</Label>
+              <Label>AI Provider</Label>
+              <div className="flex gap-2 mt-2">
+                <Button
+                  variant={apiProvider === 'openai' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setApiProvider('openai')}
+                >
+                  OpenAI GPT-4o
+                </Button>
+                <Button
+                  variant={apiProvider === 'deepseek' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setApiProvider('deepseek')}
+                >
+                  DeepSeek R1
+                </Button>
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="apikey">
+                {apiProvider === 'openai' ? 'OpenAI' : 'DeepSeek'} API Key
+              </Label>
               <Input
                 id="apikey"
                 type="password"
-                placeholder="sk-..."
+                placeholder={apiProvider === 'openai' ? 'sk-proj-...' : 'sk-...'}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
               />
